@@ -248,19 +248,25 @@ class Redis(LoggingMixIn, Operations):
       path = "/" + "/".join(key.split(":"))
 
       made_file = self.mkfile(key)
+      update_paths = []
 
       # if we are a hash, make entries for each hash key but not the hash itself
       if made_file['r_type'] == 'hash':
+        base_path = path
         for field in self.redis.hkeys(key):
-          path = path + '.' + field
+          path = base_path + '.' + field
           self.files[path] = self.mkfile(key, 'hash_field', field)
+          update_paths.append(path)
       # else, we are a non-hash, so just make the file the key name
       else:
         self.files[path] = made_file
+        update_paths.append(path)
 
-      (key, field, dir, filename) = self.splitpath(path)
-      self.dirs[dir_for_key].append(filename)
-      self.files[dir_for_key]["st_nlink"] = len(self.dirs[dir_for_key])
+      for update in update_paths:
+        (key, field, dir, filename) = self.splitpath(update)
+        self.dirs[dir_for_key].append(filename)
+        self.files[dir_for_key]["st_nlink"] = len(self.dirs[dir_for_key])
+
 
   def readlink(self, path):
     return self.read(self, path)
