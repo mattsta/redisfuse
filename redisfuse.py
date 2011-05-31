@@ -39,22 +39,25 @@ def path_field(path):
   """Two layers in"""
   return layer(path, 1)
 
+def blank_files_and_dirs():
+  files = {}
+  dirs = defaultdict(list)
+  now = time()
+  dirs['/'].extend([".", ".."])
+  files['/'] = dict(st_mode=(S_IFDIR | 0755), st_ctime=now,
+      st_mtime=now, st_atime=now, st_nlink=2)
+  return (files, dirs)
 
 class Redis(LoggingMixIn, Operations):
   """Redis-as-FS"""
-  
+
   def __init__(self, host, port):
     self.redis = redis.Redis(host=host, port=port)
-    self.files = {}
+    (self.files, self.dirs) = blank_files_and_dirs();
     self.fd = 0
-    self.dirs = defaultdict(list)
     self.repr = False
     self.disallow_unlink_representations = True
     self.disallow_rename_representations = True
-    now = time()
-    self.dirs['/'].extend([".", ".."])
-    self.files['/'] = dict(st_mode=(S_IFDIR | 0755), st_ctime=now,
-      st_mtime=now, st_atime=now, st_nlink=2)
     
   def hashkey(self, filename, field, dir):
     if not field:
@@ -133,6 +136,10 @@ class Redis(LoggingMixIn, Operations):
     return self.fd
   
   def getattr(self, path, fh=None):
+    if path == "/.updater":
+      print "Updating Listings..."
+      self.populate_files()
+
     if path not in self.files:
       raise FuseOSError(ENOENT)
     st = self.files[path]
@@ -229,7 +236,6 @@ class Redis(LoggingMixIn, Operations):
   
   def readdir(self, path, fh):
     if self.files["/"]["st_nlink"] == 2:
-      print "POPULATE FILES"
       self.populate_files()
     dir = self.dirs[path]
     if not dir:
@@ -238,6 +244,7 @@ class Redis(LoggingMixIn, Operations):
       return dir
 
   def populate_files(self):
+    (self.files, self.dirs) = blank_files_and_dirs();
     for key in self.redis.keys():
       if not key:
         continue
